@@ -1,8 +1,16 @@
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
+
 #include <iostream>
 #include <stdio.h>
 #include <fstream>
+#include <vector>
 #include <string>
 #include "sqlite3.h"
+
+#define MAX 1000000
 
 using namespace std;
 
@@ -17,7 +25,6 @@ static int callback(void *NotUsed, int argc, char **argv, char **azColName){
 
 int CreateDatabase(string name)
 {
-	name+=".db";
 	const char* dbname = name.c_str();
 	char *zErrMsg = 0;
 	int rc;
@@ -53,34 +60,42 @@ int InsertFile(string name)
 	sqlite3 *database;
 	int rc = sqlite3_open(dbname, &database);
 	char *zErrMsg = 0;
+	char buffer[MAX];
 
-	// zmien open
+	// tutaj za³atwiamy wczytywanie do binarnego
 
 	ifstream file;
-	file.open("6Zasady_zachowania.pdf", ios::in, ios::binary);
+	file.open("6Zasady_zachowania.pdf", ios::binary);
+		
+		if ( ! file )
+{
+        cout << "An error occurred opening the file" << endl;
+}
 
-	if(file.is_open())
+		ofstream ofs("temp.txt", ios::trunc); 
+		ofs << file.rdbuf();
+
+	int count = 0;
+
+	while(file.good())
 	{
-		cout << "jest ok" << endl;
-	}else
-		cout << "kurr" << endl;
+		char c=file.get();
+		buffer[count] = c;
+		count++;
+	}
 
+	// dalej jedyne co zmieniamy, to w bind_blob trzeci argument. Patrz instrukcja w pdfie pod sqlite3_binb_blob
 
 	sqlite3_stmt *stmt = NULL;
 
-	char* statement = "INSERT INTO ONE(     ID,    NAME,    LABEL,    GRP,    FILE ) VALUES (     NULL,    'fedfs',    NULL,    NULL,    NULL);";
+	char* statement = "INSERT INTO ONE(     ID,    NAME,    LABEL,    GRP,    FILE ) VALUES (     NULL,    'fedfs',    NULL,    NULL,   ?);";
 
-	//rc = sqlite3_prepare_v2(database, statement, 0, &stmt, NULL);
+	rc = sqlite3_prepare_v2(database, statement, 0, &stmt, NULL);
 
-	rc = sqlite3_exec(database, statement, callback, 0, &zErrMsg);
+	rc = sqlite3_bind_blob(stmt, 1, file.rdbuf(), -1, NULL);
 
-	if(rc!=SQLITE_OK)
-	{
-		fprintf(stderr, "prepare failed",  sqlite3_errmsg(database));
-		sqlite3_free(zErrMsg);
-	}
-	/*
-	rc = sqlite3_bind_blob(stmt, 1, NULL, -1, NULL);
+	// rc to wynik zapytania, 21 oznacze z³e u¿ycie SQLa ( jak narazie ci¹gle to wywala)
+	// 1 to z³y syntax zapytania,a 0 to wszystko ok
 
 	if(rc!=SQLITE_OK)
 	{
@@ -88,20 +103,21 @@ int InsertFile(string name)
 		cout << rc << endl;
 		sqlite3_free(zErrMsg);
 	}
-	*/
-	//rc = sqlite3_step(stmt);
+
+	rc = sqlite3_step(stmt);
 
 	sqlite3_close(database);
 
 	return 0;
 
 }
+
 int main()
 {
 	sqlite3_initialize();
 
-	//CreateDatabase("WTF");
-	InsertFile("WTF");
+	//CreateDatabase("WTF.db");
+	InsertFile("WTF.db");
 
 	sqlite3_shutdown();
 
