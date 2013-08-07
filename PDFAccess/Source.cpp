@@ -6,11 +6,11 @@
 #include <iostream>
 #include <stdio.h>
 #include <fstream>
-#include <vector>
 #include <string>
+#include <queue>
 #include "sqlite3.h"
 
-#define MAX 1000000
+#define MAX 100000000
 
 using namespace std;
 
@@ -54,64 +54,47 @@ int CreateDatabase(string name)
 
 	return 0;
 }
-int InsertFile(string name)
+int InsertFile(const string& db_name)
 {
-	const char* dbname = name.c_str();
-	sqlite3 *database;
-	int rc = sqlite3_open(dbname, &database);
-	char *zErrMsg = 0;
-	char buffer[MAX];
+    ifstream file("Sql.pdf", ios::in | ios::binary);
+    if (!file) {
+        cerr << "An error occurred opening the file\n";
+        return 12345;
+    }
+    file.seekg(0, ifstream::end);
+    streampos size = file.tellg();
+    file.seekg(0);
 
-	// tutaj za³atwiamy wczytywanie do binarnego
+    char* buffer = new char[size];
+    file.read(buffer, size);
 
-	ifstream file;
-	file.open("6Zasady_zachowania.pdf", ios::binary);
-		
-		if ( ! file )
-{
-        cout << "An error occurred opening the file" << endl;
+    sqlite3 *db = NULL;
+    int rc = sqlite3_open_v2(db_name.c_str(), &db, SQLITE_OPEN_READWRITE, NULL);
+    if (rc != SQLITE_OK) {
+        cerr << "db open failed: " << sqlite3_errmsg(db) << endl;
+    } else {
+        sqlite3_stmt *stmt = NULL;
+        rc = sqlite3_prepare_v2(db, "INSERT INTO ONE(ID, NAME, LABEL, GRP, FILE) VALUES(NULL, 'fedfsdfss', NULL, NULL, ?)",-1, &stmt, NULL);
+        if (rc != SQLITE_OK) {
+            cerr << "prepare failed: " << sqlite3_errmsg(db) << endl;
+        } else {
+            // SQLITE_STATIC because the statement is finalized
+            // before the buffer is freed:
+            rc = sqlite3_bind_blob(stmt, 1, buffer, size, SQLITE_STATIC);
+            if (rc != SQLITE_OK) {
+                cerr << "bind failed: " << sqlite3_errmsg(db) << endl;
+            } else {
+                rc = sqlite3_step(stmt);
+                if (rc != SQLITE_DONE)
+                    cerr << "execution failed: " << sqlite3_errmsg(db) << endl;
+            }
+        }
+        sqlite3_finalize(stmt);
+    }
+    sqlite3_close(db);
+
+    delete[] buffer;
 }
-
-		ofstream ofs("temp.txt", ios::trunc); 
-		ofs << file.rdbuf();
-
-	int count = 0;
-
-	while(file.good())
-	{
-		char c=file.get();
-		buffer[count] = c;
-		count++;
-	}
-
-	// dalej jedyne co zmieniamy, to w bind_blob trzeci argument. Patrz instrukcja w pdfie pod sqlite3_binb_blob
-
-	sqlite3_stmt *stmt = NULL;
-
-	char* statement = "INSERT INTO ONE(     ID,    NAME,    LABEL,    GRP,    FILE ) VALUES (     NULL,    'fedfs',    NULL,    NULL,   ?);";
-
-	rc = sqlite3_prepare_v2(database, statement, 0, &stmt, NULL);
-
-	rc = sqlite3_bind_blob(stmt, 1, file.rdbuf(), -1, NULL);
-
-	// rc to wynik zapytania, 21 oznacze z³e u¿ycie SQLa ( jak narazie ci¹gle to wywala)
-	// 1 to z³y syntax zapytania,a 0 to wszystko ok
-
-	if(rc!=SQLITE_OK)
-	{
-		fprintf(stderr, "bind failed",  sqlite3_errmsg(database));
-		cout << rc << endl;
-		sqlite3_free(zErrMsg);
-	}
-
-	rc = sqlite3_step(stmt);
-
-	sqlite3_close(database);
-
-	return 0;
-
-}
-
 int main()
 {
 	sqlite3_initialize();
